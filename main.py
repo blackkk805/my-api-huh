@@ -18,13 +18,14 @@ from google.protobuf.json_format import MessageToDict
 import uid_generator_pb2
 import player_info_pb2
 import mymessage_pb2
+import os
 
 app = Flask(__name__)
 
 key = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 iv = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 
-accounts = json.load(open("accs.json"))
+accounts = json.loads(os.environ.get("ACCOUNTS", "{}"))
 tokens = []
 
 def encrypt_api(plain_text):
