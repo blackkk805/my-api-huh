@@ -1,3 +1,4 @@
+import os
 import json
 import time
 import requests
@@ -18,7 +19,7 @@ from google.protobuf.json_format import MessageToDict
 import uid_generator_pb2
 import player_info_pb2
 import mymessage_pb2
-import os
+
 
 app = Flask(__name__)
 
