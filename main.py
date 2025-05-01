@@ -507,17 +507,5 @@ async def send_requests(tokens, hex_encrypted_data, request_type):
     return f" - Successfuly Send {request_type} !"
     
 
-if __name__ == "__main__":
-    from gunicorn.app.base import BaseApplication
-    class FlaskApp(BaseApplication):
-        def __init__(self, app, options=None):
-            self.application = app
-            self.options = options or {}
-            super().__init__()
-        def load(self):
-            return self.application
-    options = {
-        'bind': '0.0.0.0:' + str(os.environ.get("PORT", 5000)),
-        'workers': 4,
-    }
-    FlaskApp(app, options).run()
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
