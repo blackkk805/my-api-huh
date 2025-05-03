@@ -1,4 +1,3 @@
-import os
 import json
 import time
 import requests
@@ -20,13 +19,12 @@ import uid_generator_pb2
 import player_info_pb2
 import mymessage_pb2
 
-
 app = Flask(__name__)
 
 key = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 iv = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 
-accounts = json.loads(os.environ.get("ACCOUNTS", "{}"))
+accounts = json.load(open("accs.json"))
 tokens = []
 
 def encrypt_api(plain_text):
@@ -508,4 +506,5 @@ async def send_requests(tokens, hex_encrypted_data, request_type):
     
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, threaded=True)
