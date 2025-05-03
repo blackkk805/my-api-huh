@@ -1,4 +1,4 @@
-Flask
+flask[async]
 gunicorn
 requests
 aiohttp
