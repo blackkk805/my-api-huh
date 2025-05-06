@@ -275,37 +275,40 @@ async def fetch_player_info(encrypted_uid, token):
         'X-GA': "v1 1",
         'ReleaseVersion': "OB48"
     }
-
     async with aiohttp.ClientSession() as session:
         async with session.post(url, data=payload, headers=headers) as response:
             hex_output = await response.read()
             return hex_output.hex()
-        
+
 
 async def sendlike(encrypted_uid, count):
     async with aiohttp.ClientSession() as session:
+        jwt_token = get_jwt()
         # جلب الإعجابات قبل
-        info_before_hex = await fetch_player_info(encrypted_uid, session)
+        info_before_hex = await fetch_player_info(encrypted_uid, jwt_token)
         parsed_info_before = json.loads(get_available_room(info_before_hex))
         likes_before = parsed_info_before.get("1", {}).get("data", {}).get("21", {}).get("data", 0)
-        
+
         # إرسال اللايكات
         tasks = []
         for token_data in tokens[:count]:
             tasks.append(send_like_request(session, token_data["token"], encrypted_uid))
         results = await asyncio.gather(*tasks)
         success = sum(1 for res in results if res)
-        
+
         # جلب الإعجابات بعد
-        info_after_hex = await fetch_player_info(encrypted_uid, session)
+        info_after_hex = await fetch_player_info(encrypted_uid, jwt_token)
         parsed_info_after = json.loads(get_available_room(info_after_hex))
         likes_after = parsed_info_after.get("1", {}).get("data", {}).get("21", {}).get("data", likes_before)
-        
+        name_after = parsed_info_after.get("1", {}).get("data", {}).get("3", {}).get("data", "N/A")
+
         return {
             "likes_before": likes_before,
             "likes_after": likes_after,
-            "success": success
+            "success": success,
+            "name_after": name_after
         }
+
 
 async def send_like_request(session, token, encrypted_uid):
     url = "https://clientbp.ggblueshark.com/LikeProfile"
@@ -325,7 +328,7 @@ async def send_like_request(session, token, encrypted_uid):
             return response.status == 200
     except:
         return False
-    
+
 @app.route('/info', methods=['GET'])
 async def info():
     uid = request.args.get('uid')
@@ -428,33 +431,83 @@ async def send_parallel_requests(tokens, encrypted_uid, count):
         results = await asyncio.gather(*tasks)
         return results
 
+async def get_player_details(encrypted_uid, session):
+    try:
+        info_hex = await fetch_player_info(encrypted_uid, session)
+        if not info_hex:
+            return {"name": "Unknown", "likes": 0, "raw_data": None}
+        
+        # Debug: طباعة البيانات الخام
+        print(f"Raw Data Hex: {info_hex[:200]}...")  # طباعة أول 200 حرف فقط
+        
+        # المحاولة الأولى: التحليل باستخدام protobuf
+        try:
+            info_response = player_info_pb2.Info()
+            info_response.ParseFromString(bytes.fromhex(info_hex))
+            info_dict = MessageToDict(info_response)
+            
+            # استخراج البيانات من الهيكل المعروف
+            name = info_dict.get('accountInfo', {}).get('AccountName', 'Unknown')
+            likes = info_dict.get('accountInfo', {}).get('AccountLikes', 0)
+            
+            # إذا وجدنا البيانات، نرجعها
+            if name != 'Unknown' or likes != 0:
+                return {"AccountName": name, "AccountLikes": likes, "raw_data": info_hex}
+        except Exception as pb_error:
+            print(f"Protobuf parsing error: {str(pb_error)}")
+        
+        # المحاولة الثانية: التحليل اليدوي إذا فشلت الأولى
+        parsed_info = get_available_(info_hex)
+        print(f"Parsed Structure: {json.dumps(parsed_info, indent=2)}")  # Debug
+        
+        account_info = parsed_info.get("1", {}).get("data", {})
+        return {
+            "name": account_info.get("3", {}).get("data", "Unknown"),
+            "likes": account_info.get("21", {}).get("data", 0),
+            "raw_data": info_hex
+        }
+        
+    except Exception as e:
+        print(f"Error in get_player_details: {str(e)}")
+        return {"name": "Unknown", "likes": 0, "raw_data": None}
+    
 @app.route('/like', methods=['GET'])
-def like_endpoint():
+async def like_endpoint():
     uid = request.args.get('uid')
     keyy = request.args.get('key')
-    count = int(request.args.get('count', 99))
-    
+    count = int(request.args.get('count', 100))
+
     if not uid or not keyy or keyy != "a":
         return Response("Invalid request", mimetype='text/plain', status=400)
-    
+
     try:
         encrypted_id = Encrypt_ID(uid)
         plain_text = f"08{encrypted_id}1007"
         encrypted_uid = encrypt_api(plain_text)
 
-        result = asyncio.run(sendlike(encrypted_uid, count))
-        
-        return Response(
-            f"- تم إرسال {count} لايك! ✅\n"
-            f"- الإعجابات قبل: {result['likes_before']}\n"
-            f"- الإعجابات بعد: {result['likes_after']}\n"
-            f"- الطلبات الناجحة: {result['success']}",
-            mimetype='text/plain'
-        )
-    
+        result = await sendlike(encrypted_uid, count)
+
+        txt_output = []
+        txt_output.append(f"- PLayer Id InFo > {uid}\n")
+        txt_output.append("─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ")
+        txt_output.append(" - ProFile InFo : \n")
+        txt_output.append(f" - Name > {result['name_after']}")
+        txt_output.append(f" - Uid > {uid}")
+        txt_output.append(f" - Likes Before > {result['likes_before']}")
+        txt_output.append(f" - Likes Added > {result['likes_after'] - result['likes_before']}")
+        txt_output.append(f" - Likes After > {result['likes_after']}")
+        txt_output.append("\n─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ")
+        txt_output.append(" - Operation Result : \n")
+        txt_output.append(f" - Successfully sent {result['success']}/{count} likes!")
+        txt_output.append("\n─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ")
+
+        return Response("\n".join(txt_output), mimetype='text/plain')
+
     except Exception as e:
-        return Response(f"Error: {str(e)}", mimetype='text/plain', status=500)
-    
+        import traceback
+        traceback.print_exc()
+        return Response(f"System Error: {str(e)}", mimetype='text/plain', status=500)
+
 async def send_request(session, token, hex_encrypted_data, url, semaphore):
     headers = {
         'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
